@@ -9,8 +9,10 @@
 #include "data_path.hpp"
 
 #include <glm/gtc/type_ptr.hpp>
+#include <glm/gtx/string_cast.hpp>
 
 #include <random>
+
 
 //handler to hexapod data
 GLuint hexapod_meshes_for_lit_color_texture_program = 0;
@@ -59,16 +61,33 @@ PlayMode::PlayMode() : scene(*hexapod_scene) {
 	std::cout << "upper_leg:" << upper_leg->parent->name << std::endl;
 	std::cout << "lower_leg:" << lower_leg->parent->name << std::endl;
 	*/
-	//NOTE: mesh faces z direction
+	//NOTE: mesh faces +y direction
 	//get pointer to body of bird
 	for (auto &transform : scene.transforms) {
-		if ( transform.name == "m_body") bird = &transform;
+		if ( transform.name == "m_body") male_bird = &transform;
+		else if (transform.name == "f_body") fmale_bird = &transform;
 	}
-	if (bird == nullptr) throw std::runtime_error("BIRD not found.");
+	if (male_bird == nullptr) throw std::runtime_error("male BIRD not found.");
+	if (fmale_bird == nullptr) throw std::runtime_error("female BIRD not found.");
 
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
 	camera = &scene.cameras.front();
+	
+	//init some contants:
+	floor_height = male_bird->position.z;
+
+	//move the male bird to be radius away in z direction:
+	male_bird->position.y = -radius;
+
+	bird_base_rot = male_bird->rotation;
+	
+	//initalize the two birds to be facing each other
+	//rotate female bird 180 degrees around the y axis
+	/*
+	male_bird->rotation *= glm::angleAxis(glm::radians(180.f),
+		glm::vec3(0.0f, 1.0f, 0.0f));
+		*/
 }
 
 PlayMode::~PlayMode() {
@@ -161,10 +180,22 @@ void PlayMode::update(float elapsed) {
 		glm::vec3(0.0f, 0.0f, 1.0f)
 	);
 	*/
-
 	//translate bird down with space
 	if (space.pressed) {
-		bird->position.x -= 1.0f;
+		//update degree measure
+		m_degree += 1.f;
+		if (m_degree > 360) m_degree-= 360.f;
+		else if (m_degree < 0) m_degree += 360.f;
+
+		//update position 
+		//horizontal
+		m_lookat = glm::vec3(std::sin(glm::radians(m_degree)), std::cos(glm::radians(m_degree)), 0.0f);
+		//vertical
+		male_bird->position = glm::vec3(radius, radius, radius) * m_lookat + 
+								glm::vec3(0.f, 0.f, floor_height);
+
+		//update rotation to face the center
+		male_bird->rotation = bird_base_rot * glm::angleAxis(glm::radians(360.f - m_degree), glm::vec3(0.0f, 1.0f, 0.0f));
 	}
 
 	//move camera:

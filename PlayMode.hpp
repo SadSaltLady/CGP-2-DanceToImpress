@@ -22,7 +22,7 @@ struct PlayMode : Mode {
 	struct Button {
 		uint8_t downs = 0;
 		uint8_t pressed = 0;
-	} left, right, down, up, space;
+	} left, right, down, up;
 
 	//local copy of the game scene (so code can change it during gameplay):
 	Scene scene;
@@ -35,10 +35,18 @@ struct PlayMode : Mode {
 	glm::quat upper_leg_base_rotation;
 	glm::quat lower_leg_base_rotation;
 	float wobble = 0.0f;
+	//-----ADDED -----------
+	//add data about floor
+	float floor_height = 0.0f;
 
 	//bird references
-	Scene::Transform *bird = nullptr;
-	glm::quat bird_rotation;
+	Scene::Transform *male_bird = nullptr;
+	Scene::Transform *fmale_bird = nullptr;
+	//male bird movement parameters
+	float radius = 10;
+	float m_degree = 0;
+	glm::vec3 m_lookat = glm::vec3(0.0f, 0.0f, 0.0f);
+	glm::quat bird_base_rot = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
 
 	
 	//camera:
