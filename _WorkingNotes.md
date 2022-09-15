@@ -39,4 +39,8 @@ blender --background --python scenes/export-scene.py -- scenes/superb.blend dist
 
 blender --background --python scenes/export-meshes.py -- scenes/superb.blend dist/superb.pnct
 
-C:\Users\Joyce Z\Documents\15466-CGameProgramming\CGP-2-DanceToImpress  
+C:\Users\joyce\Documents\15466-CGP\CGP-2-DanceToImpress\
+## to do this again...
+have a data strucuture/tree of objects created at spawn
+each transform should contain their base transform
+do not hard code the translations and use the transformation matrices instead

@@ -40,35 +40,20 @@ Load< Scene > hexapod_scene(LoadTagDefault, []() -> Scene const * {
 });
 
 PlayMode::PlayMode() : scene(*hexapod_scene) {
-	//get pointers to leg for convenience:
-	/*
-	for (auto &transform : scene.transforms) {
-		if (transform.name == "Hip.FL") hip = &transform;
-		else if (transform.name == "UpperLeg.FL") upper_leg = &transform;
-		else if (transform.name == "LowerLeg.FL") lower_leg = &transform;
-	}
-	if (hip == nullptr) throw std::runtime_error("Hip not found.");
-	if (upper_leg == nullptr) throw std::runtime_error("Upper leg not found.");
-	if (lower_leg == nullptr) throw std::runtime_error("Lower leg not found.");
-
-	hip_base_rotation = hip->rotation;
-	upper_leg_base_rotation = upper_leg->rotation;
-	lower_leg_base_rotation = lower_leg->rotation;
-
-
-	//check the parent of the transforms
-	std::cout << "hip:" << hip->parent->name << std::endl;
-	std::cout << "upper_leg:" << upper_leg->parent->name << std::endl;
-	std::cout << "lower_leg:" << lower_leg->parent->name << std::endl;
-	*/
 	//NOTE: mesh faces +y direction
 	//get pointer to body of bird
 	for (auto &transform : scene.transforms) {
 		if ( transform.name == "m_body") male_bird = &transform;
 		else if (transform.name == "f_body") fmale_bird = &transform;
+		else if (transform.name == "heart") heart = &transform;
+		else if (transform.name == "m_thigh_l") leg_l = &transform;
+		else if (transform.name == "m_thigh_r") leg_r = &transform;
 	}
 	if (male_bird == nullptr) throw std::runtime_error("male BIRD not found.");
 	if (fmale_bird == nullptr) throw std::runtime_error("female BIRD not found.");
+	if (heart == nullptr) throw std::runtime_error("heart not found.");
+	if (leg_l == nullptr) throw std::runtime_error("no left leg");
+	if (leg_r == nullptr) throw std::runtime_error("no right leg");
 
 	//get pointer to camera for convenience:
 	if (scene.cameras.size() != 1) throw std::runtime_error("Expecting scene to have exactly one camera, but it has " + std::to_string(scene.cameras.size()));
@@ -76,18 +61,18 @@ PlayMode::PlayMode() : scene(*hexapod_scene) {
 	
 	//init some contants:
 	floor_height = male_bird->position.z;
+	leg_l_pos = leg_l->position;
+	leg_r_pos = leg_r->position;
 
 	//move the male bird to be radius away in z direction:
 	male_bird->position.y = -radius;
-
+	//move love up!
+	heart->position.z += 4.f;
 	bird_base_rot = male_bird->rotation;
-	
-	//initalize the two birds to be facing each other
-	//rotate female bird 180 degrees around the y axis
-	/*
-	male_bird->rotation *= glm::angleAxis(glm::radians(180.f),
-		glm::vec3(0.0f, 1.0f, 0.0f));
-		*/
+	heart_scale = heart->scale;
+
+	//very hard coded but no time :(
+	camera->transform->position = glm::vec3(-3.51756, 20.4435, 12.2613);
 }
 
 PlayMode::~PlayMode() {
@@ -119,6 +104,18 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 			space.downs += 1;
 			space.pressed = true;
 			return true;
+		} else if (evt.key.keysym.sym == SDLK_LEFT) {
+			bleft.downs += 1;
+			bleft.pressed = true;
+		} else if (evt.key.keysym.sym == SDLK_RIGHT) {
+			bright.downs += 1;
+			bright.pressed = true;
+		} else if (evt.key.keysym.sym == SDLK_UP) {
+			bup.downs += 1;
+			bup.pressed = true;
+		} else if (evt.key.keysym.sym == SDLK_DOWN) {
+			bdown.downs += 1;
+			bdown.pressed = true;
 		}
 	} else if (evt.type == SDL_KEYUP) {
 		if (evt.key.keysym.sym == SDLK_a) {
@@ -136,6 +133,14 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 		} else if (evt.key.keysym.sym == SDLK_SPACE) {
 			space.pressed = false;
 			return true;
+		} else if (evt.key.keysym.sym == SDLK_LEFT) {
+			bleft.pressed = false;
+		} else if (evt.key.keysym.sym == SDLK_RIGHT) {
+			bright.pressed = false;
+		} else if (evt.key.keysym.sym == SDLK_UP) {
+			bup.pressed = false;
+		} else if (evt.key.keysym.sym == SDLK_DOWN) {
+			bdown.pressed = false;
 		}
 	} else if (evt.type == SDL_MOUSEBUTTONDOWN) {
 		if (SDL_GetRelativeMouseMode() == SDL_FALSE) {
@@ -161,41 +166,143 @@ bool PlayMode::handle_event(SDL_Event const &evt, glm::uvec2 const &window_size)
 }
 
 void PlayMode::update(float elapsed) {
-	/*
 
-	//slowly rotates through [0,1):
-	wobble += elapsed / 10.0f;
-	wobble -= std::floor(wobble);
+	//with a small chance, rotate the fmale bird
+	{
+		float chance = 0.005f;
 
-	hip->rotation = hip_base_rotation * glm::angleAxis(
-		glm::radians(5.0f * std::sin(wobble * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 1.0f, 0.0f)
-	);
-	upper_leg->rotation = upper_leg_base_rotation * glm::angleAxis(
-		glm::radians(7.0f * std::sin(wobble * 2.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	lower_leg->rotation = lower_leg_base_rotation * glm::angleAxis(
-		glm::radians(10.0f * std::sin(wobble * 3.0f * 2.0f * float(M_PI))),
-		glm::vec3(0.0f, 0.0f, 1.0f)
-	);
-	*/
+		static glm::quat unshifted = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+		static glm::quat shifted = glm::quat(1.0f, 0.0f, 0.0f, 0.0f);
+
+		//generate a random number between 0 and 1
+		float random = float(rand()) / float(RAND_MAX);
+		if (!switched && random < chance) 
+		{
+
+			unshifted = bird_base_rot * glm::angleAxis(glm::radians(f_degree), glm::vec3(0.0f, 1.0f, 0.0f));
+			f_degree = float(rand()) / float(RAND_MAX) * 360.0f;
+			shifted = bird_base_rot * glm::angleAxis(
+				glm::radians(f_degree),
+				glm::vec3(0.0f, 1.0f, 0.0f));
+			switched = true;
+			
+		}
+		else if (switched) 
+		{
+			f_anim_timer += elapsed;
+			if (f_anim_timer > F_anim_duration) {
+				f_anim_timer = 0.0f;
+				switched = false;
+			} else {
+				fmale_bird->rotation = glm::mix(unshifted, shifted, f_anim_timer/F_anim_duration);
+			}
+		}
+	}
 	//translate bird down with space
-	if (space.pressed) {
-		//update degree measure
-		m_degree += 1.f;
+	{
+		if (bright.pressed) 
+		{
+			//update degree measure
+			m_degree -= 2.f;
+			moving = true;
+		}
+		if (bleft.pressed)
+		{
+			m_degree += 2.f;	
+			moving = true;	
+		}
+		else
+		{
+			moving = false;
+		}
 		if (m_degree > 360) m_degree-= 360.f;
 		else if (m_degree < 0) m_degree += 360.f;
+	}
 
-		//update position 
+	//use bup and bdown to bobble
+	{
+		float bobble_limit = 20.f;
+		bobble_force -= 5.f;
+		if (bdown.pressed)
+		{
+			bobble_force += 10.f;
+		}
+		if (bobble_force < 0) bobble_force = 0.f;
+		if (bobble_force > bobble_limit) bobble_force = bobble_limit;
+	}
+
+	//update position of male bird
+	{
+		float bobble_offset = 40.f;
+		float bobble_amount = bobble_offset * (bobble_force) * elapsed * elapsed;
+		if (bobble_amount > bobble_offset) bobble_amount = bobble_offset;
 		//horizontal
-		m_lookat = glm::vec3(std::sin(glm::radians(m_degree)), std::cos(glm::radians(m_degree)), 0.0f);
+		m_lookat = glm::vec3(std::cos(glm::radians(m_degree)), std::sin(glm::radians(m_degree)), 0.0f);
 		//vertical
 		male_bird->position = glm::vec3(radius, radius, radius) * m_lookat + 
-								glm::vec3(0.f, 0.f, floor_height);
-
+								glm::vec3(0.f, 0.f, floor_height - bobble_amount);
+		//counter act the offset in the legs
+		leg_l->position.y = leg_l_pos.y + bobble_amount;
+		leg_r->position.y = leg_r_pos.y + bobble_amount;
 		//update rotation to face the center
-		male_bird->rotation = bird_base_rot * glm::angleAxis(glm::radians(360.f - m_degree), glm::vec3(0.0f, 1.0f, 0.0f));
+		male_bird->rotation = bird_base_rot * glm::angleAxis(glm::radians(m_degree - 90.f), glm::vec3(0.0f, 1.0f, 0.0f));
+	}
+
+	//update hopping animation 
+	{
+		/*
+		static leg_transform = 
+		//if we are moving, then bobble legs up and down
+		if (moving) 
+		{
+
+		}
+		else 
+		{
+			//if not moving, move the legs till they are on the ground
+		}
+		*/
+	}
+
+	//update the love meter for the birds <3
+	//also win condition
+	{
+		static float impressed_limit = 3.f; //impress her for 2 seconds
+		static float last_height = male_bird->position.z;
+		if (impressed_timer < impressed_limit) 
+		{
+			//love is fleeting every second :( 
+			if (love_meter > 0.5f) love_meter -= 0.01f;
+			//the closer the difference is to 180, the more the love!
+			float diff = std::abs( std::abs(m_degree - f_degree - 90.f) - 180.f);
+			float added = 0.02f; 
+			//bobble increase love 
+			if (last_height != male_bird->position.z) added *= 1.5;
+			if (diff < 3.f) love_meter += added;
+			
+			if (love_meter >= 2.f) 
+			{
+				love_meter = 2.f;	
+				impressed_timer += elapsed;
+			}
+			//update the shape of the heart
+			heart->scale = heart_scale * glm::vec3(love_meter, love_meter, love_meter);
+			//rotate the heart
+			heart_timer += elapsed;
+			last_height = male_bird->position.z;
+			heart->rotation = glm::angleAxis(heart_timer, glm::vec3(0.0f, 0.0f, 1.0f));
+		}
+		else
+		{
+			//game won
+			heart_timer += elapsed;
+			//expand heart
+			love_meter += elapsed;
+			if (love_meter > 5.f) love_meter = 5.f;
+			heart->rotation = glm::angleAxis(heart_timer, glm::vec3(0.0f, 0.0f, 1.0f));
+			heart->scale = heart_scale * glm::vec3(love_meter, love_meter, love_meter);
+		}
+
 	}
 
 	//move camera:
@@ -225,6 +332,10 @@ void PlayMode::update(float elapsed) {
 	up.downs = 0;
 	down.downs = 0;
 	space.downs = 0;
+	bup.downs = 0;
+	bright.downs = 0;
+	bleft.downs = 0;
+	bup.downs = 0;
 }
 
 void PlayMode::draw(glm::uvec2 const &drawable_size) {
